@@ -40,6 +40,15 @@ def parse_args():
                        help="Random seed (default: 42)")
     parser.add_argument("--output-dir", type=str, default="microgrid_system/results",
                        help="Directory to save results (default: microgrid_system/results)")
+    # New arguments for battery degradation and weather uncertainty
+    parser.add_argument("--enable-degradation", action="store_true", 
+                       help="Enable battery degradation modeling (default: False)")
+    parser.add_argument("--enable-weather-uncertainty", action="store_true",
+                       help="Enable weather uncertainty with cloud events (default: False)")
+    parser.add_argument("--plot-degradation", action="store_true",
+                       help="Generate and save battery degradation plots (default: False)")
+    parser.add_argument("--plot-weather", action="store_true",
+                       help="Generate and save weather event impact plots (default: False)")
     
     return parser.parse_args()
 
@@ -52,7 +61,9 @@ def setup_environment(args):
     env = MicrogridEnv(
         days=args.days,
         capacity=args.battery_capacity,
-        efficiency=args.efficiency
+        efficiency=args.efficiency,
+        enable_degradation=args.enable_degradation,
+        enable_weather_uncertainty=args.enable_weather_uncertainty
     )
     
     # Generate synthetic data
@@ -63,6 +74,16 @@ def setup_environment(args):
     print(f"  - {args.days} days of simulation")
     print(f"  - {args.battery_capacity} kWh battery capacity")
     print(f"  - {args.efficiency} battery efficiency")
+    
+    if args.enable_degradation:
+        print(f"  - Battery degradation modeling enabled")
+        print(f"    - {env.degradation_per_full_cycle*100:.4f}% capacity loss per cycle")
+        print(f"    - {env.calendar_degradation_daily*100:.4f}% daily calendar aging")
+    
+    if args.enable_weather_uncertainty:
+        print(f"  - Weather uncertainty enabled")
+        print(f"    - {env.cloud_event_probability*100:.1f}% chance of cloud events")
+        print(f"    - Cloud events reduce solar to {(1-env.cloud_coverage_impact)*100:.1f}%")
     
     return env
 
@@ -140,8 +161,69 @@ def run_experiments(env, controllers, args):
     evaluator.plot_comparison(metric='total_reward')
     evaluator.plot_all_time_series(episode=0)
     
+    # Add battery degradation plot if enabled
+    if args.enable_degradation and args.plot_degradation:
+        env.plot_battery_degradation(save_path=f"{args.output_dir}/battery_degradation.png")
+        print(f"Battery degradation plot saved to {args.output_dir}/battery_degradation.png")
+    
+    # Add weather uncertainty plot if enabled
+    if args.enable_weather_uncertainty and args.plot_weather:
+        env.plot_weather_events(save_path=f"{args.output_dir}/weather_events.png")
+        print(f"Weather events plot saved to {args.output_dir}/weather_events.png")
+    
     # Save results
     evaluator.save_results(filename="experiment_results.csv")
+    
+    # If degradation is enabled, generate more detailed battery health analysis
+    if args.enable_degradation:
+        # Extract battery health data from the results
+        battery_health_data = []
+        for controller_name, episodes in evaluator.results.items():
+            # Take the last episode
+            last_episode = episodes[-1]
+            
+            # Check if degradation info is available
+            if 'capacity_degradation_percent' in last_episode:
+                final_degradation = last_episode['capacity_degradation_percent'][-1]
+                cycle_count = last_episode['cycle_count'][-1] if 'cycle_count' in last_episode else 0
+                
+                battery_health_data.append({
+                    'Controller': controller_name,
+                    'Final Capacity (%)': 100 - final_degradation,
+                    'Cycle Count': cycle_count
+                })
+        
+        # If we have data, create a comparison plot
+        if battery_health_data:
+            # Convert to pandas DataFrame
+            import pandas as pd
+            health_df = pd.DataFrame(battery_health_data)
+            
+            # Save to CSV
+            health_df.to_csv(f"{args.output_dir}/battery_health_comparison.csv", index=False)
+            
+            # Create plot
+            plt.figure(figsize=(10, 6))
+            x = np.arange(len(health_df))
+            width = 0.35
+            
+            # Plot capacity remaining and cycle count as grouped bars
+            plt.bar(x - width/2, health_df['Final Capacity (%)'], width, label='Capacity Remaining (%)')
+            plt.bar(x + width/2, health_df['Cycle Count'], width, label='Cycle Count')
+            
+            plt.xlabel('Controller')
+            plt.ylabel('Value')
+            plt.title('Battery Health Comparison by Controller')
+            plt.xticks(x, health_df['Controller'])
+            plt.legend()
+            plt.grid(True, axis='y')
+            plt.tight_layout()
+            
+            # Save plot
+            plt.savefig(f"{args.output_dir}/battery_health_comparison.png")
+            plt.close()
+            
+            print(f"Battery health comparison saved to {args.output_dir}/battery_health_comparison.png")
     
     return evaluator
 
