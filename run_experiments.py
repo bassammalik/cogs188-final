@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 # Import project modules
 from microgrid_system.environment import MicrogridEnv
-from microgrid_system.controllers import RuleBasedController, RLController, ForecastController, QLearningController, MonteCarloController
+from microgrid_system.controllers import RuleBasedController, RLController, ForecastController, QLearningController, MonteCarloController, SarsaController
 from microgrid_system.models import MicrogridGymEnv
 from microgrid_system.utils import ControllerEvaluator
 
@@ -44,6 +44,14 @@ def parse_args():
                        help="Train the Monte Carlo controller (default: False)")
     parser.add_argument("--mc-episodes", type=int, default=200,
                        help="Number of episodes to train Monte Carlo controller (default: 200)")
+    parser.add_argument("--train-sarsa", action="store_true",
+                       help="Train the SARSA controller (default: False)")
+    parser.add_argument("--sarsa-episodes", type=int, default=200,
+                       help="Number of episodes to train SARSA controller (default: 200)")
+    parser.add_argument("--extended-training", action="store_true",
+                       help="Perform extended training for all RL methods (default: False)")
+    parser.add_argument("--extended-episodes", type=int, default=500,
+                       help="Number of episodes for extended training (default: 500)")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed (default: 42)")
     parser.add_argument("--output-dir", type=str, default="microgrid_system/results",
@@ -116,7 +124,10 @@ def setup_controllers(env, args):
     # Q-learning controller
     q_model_path = f"{args.output_dir}/models/q_learning_controller.pkl"
     
-    if args.train_q:
+    if args.train_q or args.extended_training:
+        # Determine number of episodes
+        q_episodes = args.extended_episodes if args.extended_training else args.q_episodes
+        
         # Create and train Q-learning controller
         q_controller = QLearningController(
             learning_rate=0.1,
@@ -129,10 +140,10 @@ def setup_controllers(env, args):
             action_bins=5
         )
         
-        print(f"\nTraining Q-learning controller for {args.q_episodes} episodes...")
+        print(f"\nTraining Q-learning controller for {q_episodes} episodes...")
         q_controller.train(
             env=env,
-            episodes=args.q_episodes,
+            episodes=q_episodes,
             steps_per_episode=24*args.days,
             save_path=q_model_path
         )
@@ -154,7 +165,10 @@ def setup_controllers(env, args):
     # Monte Carlo controller
     mc_model_path = f"{args.output_dir}/models/monte_carlo_controller.pkl"
     
-    if args.train_mc:
+    if args.train_mc or args.extended_training:
+        # Determine number of episodes
+        mc_episodes = args.extended_episodes if args.extended_training else args.mc_episodes
+        
         # Create and train Monte Carlo controller
         mc_controller = MonteCarloController(
             discount_factor=0.95,
@@ -166,10 +180,10 @@ def setup_controllers(env, args):
             action_bins=5
         )
         
-        print(f"\nTraining Monte Carlo controller for {args.mc_episodes} episodes...")
+        print(f"\nTraining Monte Carlo controller for {mc_episodes} episodes...")
         mc_controller.train(
             env=env,
-            episodes=args.mc_episodes,
+            episodes=mc_episodes,
             steps_per_episode=24*args.days,
             save_path=mc_model_path
         )
@@ -188,17 +202,61 @@ def setup_controllers(env, args):
     else:
         print("No pre-trained Monte Carlo model found and --train-mc not specified")
     
+    # SARSA controller
+    sarsa_model_path = f"{args.output_dir}/models/sarsa_controller.pkl"
+    
+    if args.train_sarsa or args.extended_training:
+        # Determine number of episodes
+        sarsa_episodes = args.extended_episodes if args.extended_training else args.sarsa_episodes
+        
+        # Create and train SARSA controller
+        sarsa_controller = SarsaController(
+            learning_rate=0.1,
+            discount_factor=0.95,
+            exploration_rate=0.3,
+            battery_bins=10,
+            price_bins=5,
+            solar_bins=5,
+            load_bins=5,
+            action_bins=5
+        )
+        
+        print(f"\nTraining SARSA controller for {sarsa_episodes} episodes...")
+        sarsa_controller.train(
+            env=env,
+            episodes=sarsa_episodes,
+            steps_per_episode=24*args.days,
+            save_path=sarsa_model_path
+        )
+        
+        # Plot training progress
+        sarsa_controller.plot_training_progress(
+            save_path=f"{args.output_dir}/sarsa_training.png"
+        )
+        
+        controllers["SARSA"] = sarsa_controller
+    elif os.path.exists(sarsa_model_path):
+        # Load pre-trained model
+        print(f"Loading pre-trained SARSA model from {sarsa_model_path}")
+        sarsa_controller = SarsaController(model_path=sarsa_model_path)
+        controllers["SARSA"] = sarsa_controller
+    else:
+        print("No pre-trained SARSA model found and --train-sarsa not specified")
+    
     # RL controller
-    if args.train_rl:
+    if args.train_rl or args.extended_training:
         # Create gym wrapper for the environment
         gym_env = MicrogridGymEnv(env)
+        
+        # Determine number of timesteps
+        rl_timesteps = args.rl_timesteps * 2 if args.extended_training else args.rl_timesteps
         
         # Create and train RL controller
         rl_controller = RLController(gym_env)
         
-        print(f"\nTraining RL controller for {args.rl_timesteps} timesteps...")
+        print(f"\nTraining RL controller for {rl_timesteps} timesteps...")
         rl_controller.train(
-            total_timesteps=args.rl_timesteps,
+            total_timesteps=rl_timesteps,
             save_path=f"{args.output_dir}/models/rl_controller"
         )
         controllers["RL"] = rl_controller
