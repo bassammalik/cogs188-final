@@ -1,0 +1,7 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+# Model files (large binary files)
+*.pkl
+*.zip
+microgrid_system/results/models/
