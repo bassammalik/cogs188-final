@@ -138,16 +138,3 @@ The environment includes optional features to increase realism:
 1. **Battery Degradation**: Models capacity loss due to cycling and calendar aging
 2. **Weather Uncertainty**: Simulates cloud events and forecast errors
 
-## Extending the Project
-
-To extend this project, you can:
-
-1. Implement additional control strategies
-2. Enhance the environment with more complex dynamics
-3. Add more realistic data generation or use real-world data
-4. Improve the RL algorithms or add more sophisticated ML approaches
-5. Add additional components to the microgrid (e.g., wind generation, EV charging)
-
-## License
-
-This project is provided for educational purposes. 
