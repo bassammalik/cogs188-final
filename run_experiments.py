@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 # Import project modules
 from microgrid_system.environment import MicrogridEnv
-from microgrid_system.controllers import RuleBasedController, RLController, ForecastController
+from microgrid_system.controllers import RuleBasedController, RLController, ForecastController, QLearningController, MonteCarloController
 from microgrid_system.models import MicrogridGymEnv
 from microgrid_system.utils import ControllerEvaluator
 
@@ -36,6 +36,14 @@ def parse_args():
                        help="Train the RL controller (default: False)")
     parser.add_argument("--rl-timesteps", type=int, default=50000,
                        help="Number of timesteps to train RL controller (default: 50000)")
+    parser.add_argument("--train-q", action="store_true",
+                       help="Train the Q-learning controller (default: False)")
+    parser.add_argument("--q-episodes", type=int, default=200,
+                       help="Number of episodes to train Q-learning controller (default: 200)")
+    parser.add_argument("--train-mc", action="store_true",
+                       help="Train the Monte Carlo controller (default: False)")
+    parser.add_argument("--mc-episodes", type=int, default=200,
+                       help="Number of episodes to train Monte Carlo controller (default: 200)")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed (default: 42)")
     parser.add_argument("--output-dir", type=str, default="microgrid_system/results",
@@ -104,6 +112,81 @@ def setup_controllers(env, args):
         prediction_window=8
     )
     controllers["Forecast"] = forecast_controller
+    
+    # Q-learning controller
+    q_model_path = f"{args.output_dir}/models/q_learning_controller.pkl"
+    
+    if args.train_q:
+        # Create and train Q-learning controller
+        q_controller = QLearningController(
+            learning_rate=0.1,
+            discount_factor=0.95,
+            exploration_rate=0.3,
+            battery_bins=10,
+            price_bins=5,
+            solar_bins=5,
+            load_bins=5,
+            action_bins=5
+        )
+        
+        print(f"\nTraining Q-learning controller for {args.q_episodes} episodes...")
+        q_controller.train(
+            env=env,
+            episodes=args.q_episodes,
+            steps_per_episode=24*args.days,
+            save_path=q_model_path
+        )
+        
+        # Plot training progress
+        q_controller.plot_training_progress(
+            save_path=f"{args.output_dir}/q_learning_training.png"
+        )
+        
+        controllers["Q-Learning"] = q_controller
+    elif os.path.exists(q_model_path):
+        # Load pre-trained model
+        print(f"Loading pre-trained Q-learning model from {q_model_path}")
+        q_controller = QLearningController(model_path=q_model_path)
+        controllers["Q-Learning"] = q_controller
+    else:
+        print("No pre-trained Q-learning model found and --train-q not specified")
+    
+    # Monte Carlo controller
+    mc_model_path = f"{args.output_dir}/models/monte_carlo_controller.pkl"
+    
+    if args.train_mc:
+        # Create and train Monte Carlo controller
+        mc_controller = MonteCarloController(
+            discount_factor=0.95,
+            exploration_rate=0.3,
+            battery_bins=10,
+            price_bins=5,
+            solar_bins=5,
+            load_bins=5,
+            action_bins=5
+        )
+        
+        print(f"\nTraining Monte Carlo controller for {args.mc_episodes} episodes...")
+        mc_controller.train(
+            env=env,
+            episodes=args.mc_episodes,
+            steps_per_episode=24*args.days,
+            save_path=mc_model_path
+        )
+        
+        # Plot training progress
+        mc_controller.plot_training_progress(
+            save_path=f"{args.output_dir}/monte_carlo_training.png"
+        )
+        
+        controllers["Monte-Carlo"] = mc_controller
+    elif os.path.exists(mc_model_path):
+        # Load pre-trained model
+        print(f"Loading pre-trained Monte Carlo model from {mc_model_path}")
+        mc_controller = MonteCarloController(model_path=mc_model_path)
+        controllers["Monte-Carlo"] = mc_controller
+    else:
+        print("No pre-trained Monte Carlo model found and --train-mc not specified")
     
     # RL controller
     if args.train_rl:
