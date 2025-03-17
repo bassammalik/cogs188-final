@@ -16,13 +16,17 @@ The goal is to minimize the cost of electricity by:
 
 ## AI Methods Implemented
 
-The project compares three different control strategies:
+The project compares five different control strategies:
 
 1. **Rule-Based Controller**: A simple heuristic controller that follows predefined rules based on current conditions (solar, load, price, battery state of charge).
 
-2. **Reinforcement Learning Controller**: Uses Proximal Policy Optimization (PPO) to learn an optimal control policy through interaction with the environment.
+2. **Reinforcement Learning Controller (PPO)**: Uses Proximal Policy Optimization (PPO) to learn an optimal control policy through interaction with the environment.
 
 3. **Forecast-Based Controller**: Uses machine learning to forecast future solar, load, and price values, then makes decisions based on these forecasts.
+
+4. **Q-Learning Controller (Temporal Difference)**: Implements a tabular Q-learning approach that discretizes the state space and uses temporal difference learning to update state-action values after each step.
+
+5. **Monte Carlo Controller**: Uses first-visit Monte Carlo methods to learn state-action values by collecting complete episodes and updating values based on observed returns.
 
 ## Project Structure
 
@@ -33,8 +37,10 @@ microgrid_system/
 ├── controllers/                # Control strategies
 │   ├── __init__.py
 │   ├── rule_based.py           # Rule-based controller
-│   ├── rl_controller.py        # Reinforcement learning controller
-│   └── forecast_controller.py  # Forecast-based controller
+│   ├── rl_controller.py        # PPO reinforcement learning controller
+│   ├── forecast_controller.py  # Forecast-based controller
+│   ├── q_learning_controller.py # Q-learning controller
+│   └── monte_carlo_controller.py # Monte Carlo controller
 ├── models/                     # ML models and wrappers
 │   ├── __init__.py
 │   └── gym_wrapper.py          # Gym wrapper for RL
@@ -82,13 +88,21 @@ python run_experiments.py
 - `--episodes`: Number of episodes to run for each controller (default: 3)
 - `--train-rl`: Train the RL controller (default: False)
 - `--rl-timesteps`: Number of timesteps to train RL controller (default: 50000)
+- `--train-q`: Train the Q-learning controller (default: False)
+- `--q-episodes`: Number of episodes to train Q-learning controller (default: 200)
+- `--train-mc`: Train the Monte Carlo controller (default: False)
+- `--mc-episodes`: Number of episodes to train Monte Carlo controller (default: 200)
 - `--seed`: Random seed (default: 42)
 - `--output-dir`: Directory to save results (default: microgrid_system/results)
+- `--enable-degradation`: Enable battery degradation modeling (default: False)
+- `--enable-weather-uncertainty`: Enable weather uncertainty with cloud events (default: False)
+- `--plot-degradation`: Generate and save battery degradation plots (default: False)
+- `--plot-weather`: Generate and save weather event impact plots (default: False)
 
 Example with custom settings:
 
 ```bash
-python run_experiments.py --days 14 --battery-capacity 15 --train-rl --rl-timesteps 100000
+python run_experiments.py --days 14 --battery-capacity 15 --train-rl --train-q --train-mc --enable-degradation
 ```
 
 ## Output
@@ -98,7 +112,31 @@ The experiment produces the following outputs in the results directory:
 1. CSV file with summary statistics for each controller
 2. Plots comparing controllers based on various metrics
 3. Time series plots showing the behavior of each controller
-4. Saved RL model (if trained)
+4. Saved models for RL, Q-learning, and Monte Carlo controllers (if trained)
+5. Training progress plots for Q-learning and Monte Carlo controllers
+6. Battery degradation and weather uncertainty plots (if enabled)
+
+## Reinforcement Learning Approaches
+
+The project implements three different reinforcement learning approaches:
+
+1. **PPO (Proximal Policy Optimization)**: A policy gradient method that uses a neural network to approximate the policy and value functions. It's implemented using Stable-Baselines3.
+
+2. **Q-Learning (Temporal Difference)**: A value-based method that learns the action-value function (Q-function) by bootstrapping from the next state's value. It uses a tabular representation with state space discretization.
+
+3. **Monte Carlo Control**: A value-based method that learns from complete episodes. It updates the action-value function based on the actual returns observed after visiting a state-action pair.
+
+These approaches represent different paradigms in reinforcement learning:
+- PPO: Deep RL with function approximation
+- Q-Learning: Tabular RL with bootstrapping (TD learning)
+- Monte Carlo: Tabular RL with episode-based learning (no bootstrapping)
+
+## Environment Features
+
+The environment includes optional features to increase realism:
+
+1. **Battery Degradation**: Models capacity loss due to cycling and calendar aging
+2. **Weather Uncertainty**: Simulates cloud events and forecast errors
 
 ## Extending the Project
 
@@ -107,7 +145,7 @@ To extend this project, you can:
 1. Implement additional control strategies
 2. Enhance the environment with more complex dynamics
 3. Add more realistic data generation or use real-world data
-4. Improve the RL algorithm or add more sophisticated ML approaches
+4. Improve the RL algorithms or add more sophisticated ML approaches
 5. Add additional components to the microgrid (e.g., wind generation, EV charging)
 
 ## License
